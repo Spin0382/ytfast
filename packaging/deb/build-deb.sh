@@ -37,6 +37,12 @@ gzip -9n -c "$ROOT/CHANGELOG.md" > "$STAGE/usr/share/doc/$PKG/changelog.gz"
 
 SIZE_KB="$(du -sk "$STAGE" | cut -f1)"
 
+# mktemp creates the staging root as 0700 and the redirections above inherit
+# the umask: publish a tree that reads like any other installed package.
+chmod -R a+rX,go-w "$STAGE"
+
+install -d "$STAGE/DEBIAN"
+
 # The binary links libmpv and the C runtime and loads Wayland, X11, EGL and
 # fontconfig at run time, so only these three are hard dependencies. yt-dlp
 # (with Python for its own cookie import) fetches the streams; Deno is what
