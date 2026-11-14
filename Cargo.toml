@@ -67,7 +67,7 @@ mdns-sd = { version = "0.21.6", default-features = false, features = ["async"] }
 # Already in the tree through mdns-sd: per-interface SSDP searches.
 if-addrs = "0.15"
 socket2 = "0.6"
-quick-xml = "0.41"
+quick-xml = "0.42"
 # The icons! table and the Lucide icons shared with the sibling apps.
 fastframe-icons = { git = "https://github.com/crmne/fastframe", tag = "v0.15.5" }
 # Inter at its four weights (or the platform's interface face), with the
