@@ -16,8 +16,13 @@ use sha2::{Digest, Sha256};
 use youtfast_i18n::{Locale, format as trf, gettext as tr};
 
 pub const CURRENT_VERSION: &str = env!("CARGO_PKG_VERSION");
-pub const RELEASES_URL: &str = "https://github.com/bcosta19/youtfast/releases";
-const LATEST_RELEASE_API: &str = "https://api.github.com/repos/bcosta19/youtfast/releases/latest";
+// This build is packaged as a Debian package for one machine and carries a
+// codec preference upstream does not (H.264 first, see `youtfast_mpv::FORMAT`).
+// It asks its own repository for releases so a newer upstream release is never
+// offered over it: replacing this binary from upstream would drop both the
+// codec preference and the package layout.
+pub const RELEASES_URL: &str = "https://github.com/Spin0382/ytfast/releases";
+const LATEST_RELEASE_API: &str = "https://api.github.com/repos/Spin0382/ytfast/releases/latest";
 const BUNDLED_CHANGELOG: &str = include_str!("../../../CHANGELOG.md");
 
 const MAX_API_BYTES: usize = 256 * 1024;

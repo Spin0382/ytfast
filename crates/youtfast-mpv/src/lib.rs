@@ -20,10 +20,18 @@ use std::sync::Arc;
 
 pub use render::{NativeDisplay, VideoSurface};
 
-/// The streams mpv asks yt-dlp for: the best video with the best sound, or
-/// the best single file when a video has no separate streams. "Best" is
-/// bounded by the format sort [`Mpv::set_max_resolution`] sets.
-const FORMAT: &str = "bv*+ba/b";
+/// The streams mpv asks yt-dlp for: the best H.264 video with the best AAC
+/// sound, falling back to H.264 with any sound, then to the best single file
+/// when a video has no separate streams. "Best" is bounded by the format sort
+/// [`Mpv::set_max_resolution`] sets.
+///
+/// H.264 comes first because hardware decoders in wide use (GCN 1.0 Radeons,
+/// such as Oland) decode H.264 and nothing newer: an AV1 or VP9 stream falls to
+/// the software decoders and costs a whole core for 1080p, where H.264 decodes
+/// on the GPU for a few percent. AAC comes first over Opus for the same reason
+/// (cheaper to decode), and both are preferences: a video that only offers AV1
+/// or Opus still plays through the fallbacks below.
+const FORMAT: &str = "bv*[vcodec^=avc1]+ba[acodec^=mp4a]/bv*[vcodec^=avc1]+ba/b";
 /// What yt-dlp is asked for in audio-only mode: best audio, falling back to
 /// best combined stream.
 const AUDIO_FORMAT: &str = "ba/b";

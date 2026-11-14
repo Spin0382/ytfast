@@ -1,0 +1,70 @@
+name: deb-amd64
+
+# Local packaging: one .deb built for the machine this fork serves (AMD
+# A4-5300B / Piledriver, Radeon Oland). Not part of upstream's release flow.
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths-ignore: ['**/*.md', 'docs/**', 'assets/**']
+
+concurrency:
+  group: deb-amd64-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  deb:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    env:
+      # bdver2 is Piledriver: AVX, FMA3, XOP/FMA4, AES, no AVX2. Spelled out
+      # instead of "native" because the runner's CPU is not the target's:
+      # "native" here would emit AVX2 and die with SIGILL on the target.
+      RUSTFLAGS: '-C target-cpu=bdver2'
+      DEB_VERSION: '0.8.0+h264.1-1'
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Pinned compiler
+        run: |
+          toolchain=$(python3 -c 'import tomllib; print(tomllib.load(open("rust-toolchain.toml", "rb"))["toolchain"]["channel"])')
+          rustup toolchain install "$toolchain" --profile minimal
+
+      - name: System dependencies
+        timeout-minutes: 30
+        run: |
+          sudo apt-get -o Acquire::Retries=3 update
+          sudo apt-get install -y --no-install-recommends -o Acquire::Retries=3 \
+            build-essential pkg-config libmpv-dev libxkbcommon-dev libwayland-dev \
+            libgl1-mesa-dev libfontconfig1-dev libssl-dev
+
+      - name: Build
+        run: cargo build --release --locked
+
+      - name: Check the binary matches the target CPU
+        run: |
+          echo "RUSTFLAGS=$RUSTFLAGS"
+          target/release/youtfast --version
+          ! ldd target/release/youtfast | grep 'not found'
+          # bdver2 has AVX but not AVX2: any of these would be an illegal
+          # instruction on the target. (YMM registers alone are legal.)
+          if objdump -d target/release/youtfast | grep -qwE 'vpalignr|vperm2i128|vpblendd|vpsllvd|vpsravd|vpermd|vpbroadcastd'; then
+            echo 'found AVX2-only instructions in a bdver2 build' >&2; exit 1
+          fi
+
+      - name: Package .deb
+        run: VERSION="$DEB_VERSION" packaging/deb/build-deb.sh
+
+      - name: Inspect the package
+        run: |
+          deb=$(ls dist/*.deb)
+          dpkg-deb -I "$deb"
+          dpkg-deb -c "$deb"
+          echo "sha256  $(sha256sum "$deb" | cut -d' ' -f1)"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: youtfast-deb
+          path: dist/*.deb
+          if-no-files-found: error
+          retention-days: 30
