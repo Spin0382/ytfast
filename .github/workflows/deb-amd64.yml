@@ -8,6 +8,9 @@ on:
     branches: [main]
     paths-ignore: ['**/*.md', 'docs/**', 'assets/**']
 
+permissions:
+  contents: read
+
 concurrency:
   group: deb-amd64-${{ github.ref }}
   cancel-in-progress: true
@@ -17,13 +20,23 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 120
     env:
-      # bdver2 is Piledriver: AVX, FMA3, XOP/FMA4, AES, no AVX2. Spelled out
+      # bdver2 is Piledriver: AVX, FMA3, BMI1, AES, no AVX2. Spelled out
       # instead of "native" because the runner's CPU is not the target's:
       # "native" here would emit AVX2 and die with SIGILL on the target.
-      RUSTFLAGS: '-C target-cpu=bdver2'
+      #
+      # RUSTFLAGS also reaches the build scripts and procedural macros, which
+      # run *on the runner*: bdver2 additionally turns on xop, fma4 and tbm,
+      # and no Zen or Ice Lake runner has them, so num-traits' build script
+      # died with SIGILL. Those three are the only bdver2 features the target
+      # shares with nothing newer, so dropping them keeps the AVX/FMA3/BMI1
+      # codegen this machine actually wants and makes the build portable to
+      # the runner.
+      RUSTFLAGS: '-C target-cpu=bdver2 -C target-feature=-xop,-fma4,-tbm'
       DEB_VERSION: '0.8.0+h264.1-1'
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
 
       - name: Pinned compiler
         run: |
@@ -37,6 +50,11 @@ jobs:
           sudo apt-get install -y --no-install-recommends -o Acquire::Retries=3 \
             build-essential pkg-config libmpv-dev libxkbcommon-dev libwayland-dev \
             libgl1-mesa-dev libfontconfig1-dev libssl-dev
+
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0
+        with:
+          shared-key: deb-amd64
+          save-if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
 
       - name: Build
         run: cargo build --release --locked
@@ -62,7 +80,7 @@ jobs:
           dpkg-deb -c "$deb"
           echo "sha256  $(sha256sum "$deb" | cut -d' ' -f1)"
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         with:
           name: youtfast-deb
           path: dist/*.deb
