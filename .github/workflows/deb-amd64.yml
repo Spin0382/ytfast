@@ -59,16 +59,23 @@ jobs:
       - name: Build
         run: cargo build --release --locked
 
-      - name: Check the binary matches the target CPU
+      - name: Check the build targets this machine and not the runner
         run: |
           echo "RUSTFLAGS=$RUSTFLAGS"
+          # -C target-cpu=native would emit AVX2 (the runner's CPU has it) and
+          # die with SIGILL on the target, which has none, so assert that the
+          # flags never enable it. The disassembly is not checked instead: the
+          # AVX2 mnemonics do show up in the binary from dependencies that
+          # dispatch on the CPU at run time (memchr among them), which is safe,
+          # and the scan also flags AVX1 instructions (vpalignr is AVX).
+          cfg=$(rustc --print cfg $RUSTFLAGS)
+          if grep -q 'feature="avx2"' <<<"$cfg"; then
+            echo 'the build flags enable AVX2, which this machine does not have' >&2
+            exit 1
+          fi
+          grep -qx 'target_feature="avx"' <<<"$cfg" || { echo 'the build flags lost AVX' >&2; exit 1; }
           target/release/youtfast --version
           ! ldd target/release/youtfast | grep 'not found'
-          # bdver2 has AVX but not AVX2: any of these would be an illegal
-          # instruction on the target. (YMM registers alone are legal.)
-          if objdump -d target/release/youtfast | grep -qwE 'vpalignr|vperm2i128|vpblendd|vpsllvd|vpsravd|vpermd|vpbroadcastd'; then
-            echo 'found AVX2-only instructions in a bdver2 build' >&2; exit 1
-          fi
 
       - name: Package .deb
         run: VERSION="$DEB_VERSION" packaging/deb/build-deb.sh
